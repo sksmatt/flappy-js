@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width">
+<title>Flappy JS</title>
+<style>
+    body {
+        background: #222;
+        color:#fff;
+        font:16px "Monaco";
+        text-align:center;
+        margin:10px 0;
+    }
+    #canvas {
+        border:0.2em solid #fff;
+        height: 85vh;
+        margin:0 auto;
+        display:block;
+    }
+</style>
+<script>
+    window.onload = function() {
+        const ctx = canvas.getContext("2d");
+
+        class Vec {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        class Bird {
+
+            constructor() {
+                this.size = 12;
+                this.start = new Vec(64, (canvas.height/2) - (this.size/2));
+                this.pos = new Vec();
+                this.velocity = 0;
+                this.gravity = 0.8;
+                this.lift = -20;
+                this.color = "#fecd50";
+            }
+
+            collision(pipe) {
+                if(this.pos.y + (this.size*2) > canvas.height) {
+                    return true;
+                } else if(this.pos.y < 0) {
+                    return true;
+                } else if(
+                    (this.pos.x >= pipe.pos.x) && 
+                    (this.pos.x <= pipe.right()) &&
+                    (
+                        (this.pos.y <= pipe.top) || 
+                        (this.pos.y >= canvas.height - pipe.bottom)
+                    )) {
+                    return true;
+                }
+                return false;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.fillStyle = this.color;
+                ctx.arc(this.pos.x, this.pos.y, 
+                   this.size, 
+                   0, 2 * Math.PI, false);
+                ctx.fill();
+            }
+
+            flap() {
+                this.velocity += this.lift;
+            }
+
+            reset() {
+                this.pos = new Vec(this.start.x, this.start.y);
+            }
+
+            update() {
+                this.velocity += this.gravity;
+                this.velocity *= 0.9;
+                this.pos.y += this.velocity;
+            }
+
+        }
+
+        class Pipe {
+
+            constructor(speed) {
+                this.pos = new Vec(canvas.width, 0);
+                this.width = 24;
+                this.top = this.bottom = 0;
+                this.color = "#27a163";
+                this.scored = false;
+                this.speed = speed;
+                this.randomize();
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(
+                    this.pos.x, 0, 
+                    this.width, this.top
+                    );
+                ctx.fillRect(
+                    this.pos.x, canvas.height - this.bottom, 
+                    this.width, this.bottom
+                    );
+            }
+
+            offseting() {
+                return this.pos.x == -this.width;
+            }
+
+            randomize() {
+                let whitespace = range(150, 250);
+                this.top = range(50, canvas.height/2);
+                this.bottom = canvas.height - whitespace - this.top;
+            }
+
+            right() {
+                return this.pos.x + this.width;
+            }
+
+            score(bird) {
+                return !this.scored && this.right() < bird.pos.x;
+            }
+
+            update() {
+                this.pos.x -= this.speed;
+            }
+
+        }
+
+        class Game {
+
+            constructor() {
+                this.increase = 0.2;
+                this.step = 1/60;
+                this.bird = new Bird();
+                this.loop = this.loop.bind(this);
+                this.rate = 50;
+                this.reset();
+                this.run();
+            }
+
+            draw() {
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                this.pipes.forEach(pipe=>pipe.draw());
+                this.bird.draw();
+            }
+
+            input() {
+                let pressed = false;
+                document.addEventListener('keydown', e => {
+                    if(e.keyCode == 32){
+                        if(!this.started) {
+                            this.started = true; 
+                            return;
+                        }
+                        if(!pressed) {
+                            this.bird.flap();
+                            pressed = true;
+                        }
+                    }
+                });
+
+                document.addEventListener('keyup', e => {
+                    if(e.keyCode == 32){
+                        if(pressed) {
+                            pressed = false;
+                        }
+                    }
+                });
+            }
+
+            loop(time) {
+                if(this.lastTime) {
+                    this.update((time - this.lastTime) / 1000);
+                    this.draw();
+                }
+                this.lastTime = time;
+                window.requestAnimationFrame(this.loop);
+            }
+
+            reset() {
+                scoring.innerHTML = this.frame = this.score = this.acc = this.lastTime = 0;
+                this.speed = 4;
+                this.started = false;
+                this.pipes = [new Pipe(this.speed)];
+                this.bird.reset();
+            }
+
+            run() {
+                this.reset();
+                this.input();
+                this.loop();
+            }
+
+            simulate() {
+                if(!this.started) return;
+
+                this.bird.update();
+
+                if(this.frame % this.rate === 0) {
+                    this.pipes.push(new Pipe(this.speed));
+                }
+
+                this.pipes.forEach(pipe=>{
+
+                    pipe.update();
+
+                    if(pipe.offseting()) {
+                        this.pipes.shift();
+                    }
+
+                    if(pipe.score(this.bird)) {
+                        pipe.scored = true;
+                        this.updateScore();
+                        this.updateSpeed();
+                    }
+
+                    if(this.bird.collision(pipe)) {
+                        this.reset();
+                    }
+
+                });
+
+                this.frame++;
+            }
+
+            update(dt) {
+                this.acc += dt;
+                while(this.acc > this.step) {
+                    this.simulate();
+                    this.acc -= this.step;
+                }
+            }
+
+            updateScore() {
+                scoring.innerHTML = ++this.score * 10;
+            }
+
+            updateSpeed() {
+                if(this.score % 2 === 0) {
+                    if(this.speed < 7) {
+                        this.speed += this.increase;    
+                    }
+                }
+            }
+
+        }
+
+        const range = function(min, max) {
+            return Math.floor(Math.random() * (max - min) + min);
+        }
+
+        new Game();
+
+    };
+</script>
+<div id="scoring">0</div>
+<small>SPACE to start + fly</small>
+<canvas id="canvas" width="400px" height="600px"/>
